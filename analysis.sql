@@ -289,4 +289,176 @@ FROM schools_analysis
 GROUP BY size
 ORDER BY rate DESC;
 
+--Labels each school "Above" or "At or below" it's own state rate then count how many of each per state
+SELECT 
+s.state, 
+COUNT(*) AS school,  
+	CASE 
+		WHEN (s.chronically_absent * 100.0 / s.enrollment) > sr.state_rate THEN 'Above' 
+		ELSE 'At or below'
+	END AS position 
+FROM schools_analysis AS s 
+JOIN (
+	SELECT state,
+		SUM(chronically_absent) * 100.0 / SUM(enrollment) AS state_rate 
+	FROM schools_analysis 
+	GROUP BY state 
+) AS sr 
+ON s.state = sr.state
+GROUP BY s.state, position
+ORDER BY s.state; 
+
+
+WITH state_rates AS (
+	SELECT state,
+		SUM(chronically_absent) * 100.0 / SUM(enrollment) AS state_rate 
+	FROM schools_analysis 
+	GROUP BY state 
+) 
+SELECT 
+s.state, 
+COUNT(*) AS schools,  
+	CASE 
+		WHEN (s.chronically_absent * 100.0 / s.enrollment) > sr.state_rate THEN 'Above' 
+		ELSE 'At or below'
+	END AS position 
+FROM schools_analysis AS s 
+JOIN state_rates AS sr 
+ON s.state = sr.state
+GROUP BY s.state, position
+ORDER BY s.state; 
+
+
+-- CCSD Schools rate vs the district rate and the gap between the two. 
+WITH district_rates AS ( 
+	SELECT leaid,
+		SUM(chronically_absent) * 100.0 / SUM(enrollment) AS district_rate  
+	FROM schools_analysis 
+	GROUP BY leaid
+)
+SELECT 
+	S.school_name, 
+	s.enrollment,
+	ROUND(s.chronically_absent * 100.0 / s.enrollment, 1) AS school_rate,
+	ROUND(dr.district_rate, 1) AS district_rate, 
+	ROUND(s.chronically_absent * 100.0 / s.enrollment - dr.district_rate, 1) AS gap 
+FROM schools_analysis AS s
+JOIN district_rates AS dr 
+ON s.leaid = dr.leaid 
+WHERE s.lea_name = 'CLARK COUNTY SCHOOL DISTRICT' 
+	AND s.enrollment >= 200 
+ORDER BY gap DESC;
+
+
+-- 191 CCSD schools are above the rate and 160 are below the rate
+WITH district_rates AS ( 
+	SELECT leaid,
+		SUM(chronically_absent) * 100.0 / SUM(enrollment) AS district_rate  
+	FROM schools_analysis 
+	GROUP BY leaid
+)
+SELECT COUNT(*) AS schools,
+	CASE 
+		WHEN (s.chronically_absent * 100.0 / s.enrollment) > dr.district_rate THEN 'Above' 
+		ELSE 'At or below'
+	END AS position 
+FROM schools_analysis AS s
+JOIN district_rates AS dr 
+ON s.leaid = dr.leaid 
+WHERE s.lea_name = 'CLARK COUNTY SCHOOL DISTRICT'
+GROUP BY position;
+--
+WITH district_rates AS (
+	SELECT 
+		state, 
+		lea_name, 
+		SUM(enrollment) AS total_enrollment,
+		SUM(chronically_absent) * 100.0 / SUM(enrollment) AS district_rate
+	FROM schools_analysis 
+	GROUP BY leaid, state, lea_name
+	HAVING SUM(enrollment) >= 1000
+),
+ranked AS (
+	SELECT 
+		state,
+		lea_name,
+		total_enrollment,
+		ROUND(district_rate, 1) AS district_rate,
+		RANK() OVER (PARTITION BY state ORDER BY district_rate DESC) AS state_rank
+	FROM district_rates	
+) 
+SELECT *	
+FROM ranked 
+WHERE state_rank <= 3 
+ORDER BY state, state_rank;
+--
+WITH clark_schools AS(
+	SELECT
+		school_name,
+		school_level,
+		enrollment,
+		(chronically_absent) * 100.0 / (enrollment) AS school_rate 
+	FROM schools_analysis
+	WHERE lea_name = 'CLARK COUNTY SCHOOL DISTRICT' AND enrollment >= 200 
+),
+ranked AS (
+	SELECT
+		school_name,
+		school_level,
+		enrollment,
+		ROUND(school_rate, 1) AS school_rate,
+		RANK() OVER(ORDER BY school_rate DESC) AS school_rank 
+	FROM clark_schools
+)
+SELECT * 
+FROM ranked 
+WHERE school_rank <= 10 
+ORDER BY school_rank; 
+--
+CREATE VIEW district_summary AS 
+SELECT 
+	d.leaid, 
+	d.lea_name,
+	d.state,
+	d.agency_type,
+	COUNT(*) AS schools,
+	SUM(s.enrollment) AS total_enrollment,
+	SUM(s.chronically_absent) AS chronically_absent,
+	ROUND(SUM(s.chronically_absent) * 100.0 / SUM(s.enrollment), 1) AS rate
+FROM districts_clean AS d 
+JOIN schools_analysis AS s
+ON d.leaid = s.leaid 
+GROUP BY d.leaid, d.lea_name, d.state, d.agency_type;
+
+SELECT * FROM district_summary WHERE lea_name = 'CLARK COUNTY SCHOOL DISTRICT';
+
+CREATE VIEW school_vs_district AS 
+WITH district_rates AS (
+	SELECT leaid,
+           SUM(chronically_absent) * 100.0 / SUM(enrollment) AS district_rate
+    FROM schools_analysis
+    GROUP BY leaid
+)
+SELECT
+    s.ncessch,
+    s.school_name,
+    s.lea_name,
+    s.state,
+    s.school_level,
+    s.enrollment,
+    s.latitude,
+    s.longitude,
+    ROUND(s.chronically_absent * 100.0 / s.enrollment, 1) AS school_rate,
+    ROUND(dr.district_rate, 1) AS district_rate,
+    ROUND(s.chronically_absent * 100.0 / s.enrollment - dr.district_rate, 1) AS gap
+FROM schools_analysis AS s
+JOIN district_rates AS dr
+ON s.leaid = dr.leaid;
+
+SELECT COUNT(*) FROM school_vs_district;
+
+
+
+
+
 
