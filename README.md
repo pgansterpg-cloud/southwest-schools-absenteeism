@@ -2,7 +2,7 @@
 
 How does chronic absenteeism in Nevada compare to Arizona, Utah, and New Mexico, and where within Nevada is it concentrated?
 
-[**View the interactive Tableau dashboard**](https://public.tableau.com/app/profile/preston.gunter/viz/SouthwestSchoolsChronicAbsenteeism2022-23/AbsenteeismDashboard)
+[**View the interactive Tableau dashboards**](https://public.tableau.com/app/profile/preston.gunter/viz/SouthwestSchoolsChronicAbsenteeism2022-23/AbsenteeismDashboard): **Absenteeism Dashboard** (state, locale, and school map) and **District Deep Dive** (district rankings and Clark County schools vs. the district rate).
 
 ![Dashboard preview](dashboard.png)
 
@@ -11,6 +11,8 @@ How does chronic absenteeism in Nevada compare to Arizona, Utah, and New Mexico,
 ## Headline finding
 
 **Clark County School District's chronic absenteeism rate (28.9%) is about 10 points higher than the rest of Nevada's (18.6%).** Because Clark enrolls roughly 64% of Nevada's students, it drives the statewide rate. Clark's ~89,000 chronically absent students is close to the total for all of New Mexico (~90,000).
+
+Clark is not Nevada's highest district, though: among the 12 Nevada districts with 1,000+ students, it ranks **4th**, behind Lander (34.6%), Humboldt (31.2%), and White Pine (30.6%). Its size, not its rate alone, is what makes it the center of Nevada's problem.
 
 ## Why this question
 
@@ -25,6 +27,8 @@ Follow-up questions:
 - Does absenteeism differ by school level (elementary, middle, high)?  
 - Does it differ by how urban or rural a school is?  
 - Within Nevada, how does Clark County compare to the rest of the state?
+- Which districts in each state have the highest rates?
+- Within Clark County, which schools are furthest above the district rate?
 
 ## Data
 
@@ -35,6 +39,7 @@ Follow-up questions:
 | **States** | Arizona, Nevada, New Mexico, Utah |
 | **Unit** | One row per school |
 | **Key fields** | Enrollment, chronically absent students, school level and type, charter, virtual, urban-centric locale, district, latitude/longitude |
+| **District file** | A second CCD download with one row per district (2022): district ID, name, state, agency type, enrollment, number of schools, locale. Joined to schools on `leaid`. |
 
 **Definitions**
 
@@ -60,9 +65,12 @@ Source: [NCES Locale Definitions](https://nces.ed.gov/programs/edge/docs/locale_
 ## Tools and pipeline
 
 ```
-Urban Institute CSV ──► PostgreSQL (Neon) ──► SQL cleaning + analysis ──► CSV export ──► Tableau Public
-                         schools_raw           schools_clean              schools_analysis.csv
-                                               schools_analysis (view)
+Urban Institute CSVs ──► PostgreSQL (Neon) ──► SQL cleaning + analysis ──► CSV exports ──► Tableau Public
+                          schools_raw           schools_clean               schools_analysis.csv
+                          districts_raw         districts_clean             district_summary.csv
+                                                schools_analysis (view)     school_vs_district.csv
+                                                district_summary (view)
+                                                school_vs_district (view)
 ```
 
 - **PostgreSQL on Neon**, managed with **pgAdmin**  
@@ -74,6 +82,10 @@ Database tables:
 1. `schools_raw`: the original CSV, imported with every column as TEXT so nothing was lost or misread on import.  
 2. `schools_clean`: typed and renamed columns, with inactive, closed, and future schools removed (5,169 schools). The primary key is `ncessch`, the NCES school ID.  
 3. `schools_analysis` (view): the final analysis set of 4,193 schools.
+4. `districts_raw`: the district CSV, imported as TEXT (1,055 districts).
+5. `districts_clean`: typed columns, with one out-of-state row removed (1,054 districts; see cleaning decisions). The primary key is `leaid`.
+6. `district_summary` (view): one row per district with analysis schools (838), with its agency type, school count, enrollment, and rate. Feeds the district ranking chart.
+7. `school_vs_district` (view): every analysis school (4,193) with its own rate, its district's rate, and the gap between them. Feeds the Clark County chart.
 
 The database connection string is stored in an environment variable (`DATABASE_URL`) and is not committed to this repo.
 
@@ -94,6 +106,8 @@ Going from 5,169 operating schools to 4,193 analysis schools:
 **Why drop alternative and special education schools?** Enrollment is a one-day fall snapshot, but chronic absenteeism counts every student who attended at any point during the year. At schools where students constantly come and go, the absent count can exceed the fall enrollment. Before filtering, **109 schools reported more chronically absent students than enrolled students**. For example, Variety ES, a CCSD special education school, reports 19 students, which is far fewer than actually attend during the year.
 
 **Sensitivity check:** Restricting the data to regular schools changed each state's rate by less than 0.5 percentage points, so this decision doesn't drive the results.
+
+**District file checks:** Every `leaid` was unique and 7 characters long, and the whole file was one year (2022). One agency (Ombudsman Educational Services, `leaid` 0400811) listed an Illinois address, but its ID starts with 04, so it is an Arizona charter agency. It had 0 schools and no enrollment, so it was left out of `districts_clean`. A `LEFT JOIN` confirmed that **every one of the 4,193 analysis schools matches a district**.
 
 ## Key findings
 
@@ -129,6 +143,38 @@ The rate ranges from **31.8% in "Rural, remote"** schools down to **16.1% in "Su
 | State-sponsored charter schools | 14.3% |
 | **Rest of Nevada (everything except Clark)** | **18.6%** |
 
+### 5. Highest-absenteeism districts by state
+
+Districts with 1,000+ students, ranked within their state with `RANK() OVER (PARTITION BY state ...)`:
+
+| State | #1 | #2 | #3 |
+| :---- | :---- | :---- | :---- |
+| Arizona | Window Rock Unified (84.3%) | Chinle Unified (70.2%) | Ganado Unified (67.6%) |
+| New Mexico | Socorro Consolidated (55.7%) | Española Public Schools (49.8%) | Moriarty-Edgewood (49.0%) |
+| Nevada | Lander County (34.6%) | Humboldt County (31.2%) | White Pine County (30.6%) |
+| Utah | Entheos Academy (41.1%) | Ogden Preparatory Academy (39.0%) | Freedom Preparatory Academy (28.1%) |
+
+Five of Arizona's top 10 districts (Window Rock, Chinle, Ganado, Kayenta, and Piñon) are on the Navajo Nation, and Whiteriver is on the Fort Apache Reservation. That fits the locale finding: remote rural schools have the highest rates.
+
+### 6. Clark County schools vs. the district rate
+
+Of Clark's 351 analysis schools, **191 are above** the district rate (28.9%) and **160 are at or below** it. Among schools with 200+ students, the furthest above are NV Learning Academy J-SHS (75.8%, **+46.9 points**), Manch J E ES (+46.2), and Thomas Ruby S ES (+43.4). Half of the top 10 are large high schools with 2,000+ students each.
+
+### 7. "Charter school" and "charter agency" are not the same
+
+The school-level charter flag counts **731** charter schools, but only **669** belong to a charter agency. The other **62** are charters authorized by a regular district (Albuquerque 29, Clark 11, Washoe 10, and a few others), so they report under that district's ID. Comparing charter vs. non-charter schools should use the school-level flag.
+
+## SQL techniques used
+
+- Raw-then-clean imports (all-TEXT staging tables, `NULLIF` + casts, primary keys)
+- Data checks: uniqueness (`COUNT(*)` vs. `COUNT(DISTINCT)`), ID length, blanks and zeros with `COUNT(*) FILTER (WHERE ...)`
+- `INNER JOIN` and `LEFT JOIN` in both directions to find unmatched rows
+- `CASE` for absenteeism tiers, school size buckets, and above/below-average labels
+- Subqueries and stacked CTEs (`WITH ... AS`)
+- Window functions: `RANK() OVER (PARTITION BY ... ORDER BY ...)`
+- `GROUP BY` with `HAVING`
+- Views to feed Tableau
+
 ## Limitations
 
 - **Fall snapshot.** Enrollment is counted on one day in the fall, while absenteeism covers the whole year. Schools with high student turnover can look worse (or impossible) on this measure. This is why alternative and special education schools were excluded.  
@@ -137,6 +183,8 @@ The rate ranges from **31.8% in "Rural, remote"** schools down to **16.1% in "Su
 - **One school year.** 2022–23 was still close to the COVID-19 disruptions, so these rates may be higher than in a typical year. One year can't show trends.  
 - **Title I status was blank** for every 2022 row, so poverty couldn't be included in this version.  
 - **Excluded schools.** The findings apply to regular schools only.
+- **District rankings use a 1,000-student cutoff.** Small districts and one-school charter agencies can have extreme rates from just a few students, so they were left out of the rankings. For one-school agencies, the school *is* the district, so the school-vs-district gap is always 0.
+- **Location is not a cause.** The high rates in Navajo Nation and other remote districts likely reflect distance, weather, transportation, and access to services, but this data can't show that.
 
 ## Next steps (v2)
 
@@ -149,10 +197,13 @@ The rate ranges from **31.8% in "Rural, remote"** schools down to **16.1% in "Su
 
 | File | Description |
 | :---- | :---- |
-| `analysis.sql` | All SQL in order: building `schools_clean`, data checks, the `schools_analysis` view, and each analysis query with its results |
+| `analysis.sql` | All SQL in order: building `schools_clean`, data checks, the `schools_analysis` view, each analysis query with its results, then the district import, joins, CASE, CTEs, rankings, and the two Tableau views |
 | `data/EducationDataPortal_10.05.2026_Schools.csv` | The raw download from the Urban Institute Data Explorer (imported into `schools_raw`) |
 | `data/EducationDataPortal_10.05.2026_datadictionary.csv` | Data dictionary from the download: each variable's label, source, and year |
 | `data/schools_analysis.csv` | The final 4,193-school dataset used in Tableau |
+| `data/EducationDataPortal_10.14.2026_School Districts.csv` | The raw district download (imported into `districts_raw`) |
+| `data/district_summary.csv` | Export of the `district_summary` view (838 districts), used in Tableau |
+| `data/school_vs_district.csv` | Export of the `school_vs_district` view (4,193 schools), used in Tableau |
 | `dashboard.png` | Screenshot of the Tableau dashboard |
 | `README.md` | This file |
 
