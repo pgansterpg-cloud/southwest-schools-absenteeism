@@ -74,7 +74,7 @@ Urban Institute CSVs ──► PostgreSQL (Neon) ──► SQL cleaning + analys
 ```
 
 - **PostgreSQL on Neon**, managed with **pgAdmin**  
-- **SQL** for cleaning, validation, and analysis (`analysis.sql`)  
+- **SQL** for cleaning, validation, and analysis (`sql/analysis.sql`)  
 - **Tableau Public** for the dashboard
 
 Database tables:
@@ -197,7 +197,7 @@ The school-level charter flag counts **731** charter schools, but only **669** b
 
 | File | Description |
 | :---- | :---- |
-| `analysis.sql` | All SQL in order: building `schools_clean`, data checks, the `schools_analysis` view, each analysis query with its results, then the district import, joins, CASE, CTEs, rankings, and the two Tableau views |
+| `sql/analysis.sql` | All SQL in order: building `schools_clean`, data checks, the `schools_analysis` view, each analysis query with its results, then the district import, joins, CASE, CTEs, rankings, and the two Tableau views |
 | `data/EducationDataPortal_10.05.2026_Schools.csv` | The raw download from the Urban Institute Data Explorer (imported into `schools_raw`) |
 | `data/EducationDataPortal_10.05.2026_datadictionary.csv` | Data dictionary from the download: each variable's label, source, and year |
 | `data/schools_analysis.csv` | The final 4,193-school dataset used in Tableau |
