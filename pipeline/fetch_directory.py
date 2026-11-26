@@ -1,28 +1,24 @@
 import requests
-import time
-from pprint import pprint 
 import psycopg
 import os
 from dotenv import load_dotenv
+from config import YEAR,FIPS,DISTRICT_NAME,BASE_URL
 
-url = "https://educationdata.urban.org/api/v1/schools/ccd/directory/2022/"
-params = {"fips": 32}
+load_dotenv()
+
+url = f"{BASE_URL}{YEAR}/"
+params = {"fips": FIPS}
+print(url) 
 
 response = requests.get(url, params=params, timeout=30)
 data = response.json()
 
-school_list = [] 
-
-data = response.json()
 ccsd_schools = [] 
 
 for school in data["results"]: 
-    if school["lea_name"] == "CLARK COUNTY SCHOOL DISTRICT": 
+    if school["lea_name"] == DISTRICT_NAME: 
         ccsd_schools.append({"ncessch": school["ncessch"], "seasch": school["seasch"], "school_name": school["school_name"]})
 
-# pprint(ccsd_schools[:3]) 
-
-load_dotenv()
 
 with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
     with conn.cursor() as cur:
