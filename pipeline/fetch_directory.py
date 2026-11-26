@@ -28,6 +28,14 @@ with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
     with conn.cursor() as cur:
         for ccsd_school in ccsd_schools: 
             cur.execute(
-                "INSERT INTO school_id_crosswalk (ncessch, seasch, school_name) VALUES (%s, %s, %s)",
+                """
+                INSERT INTO school_id_crosswalk (ncessch, seasch, school_name) 
+                VALUES (%s, %s, %s) 
+                ON CONFLICT (ncessch) 
+                DO UPDATE SET
+                    seasch = EXCLUDED.seasch, 
+                    school_name = EXCLUDED.school_name
+                """,
                 (ccsd_school["ncessch"], ccsd_school["seasch"], ccsd_school["school_name"])
             )
+            
